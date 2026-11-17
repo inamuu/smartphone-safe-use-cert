@@ -22,6 +22,7 @@ for(let trial=0;trial<100;trial++){
   run('var generated=createExam()');
   assert.equal(run('generated.length'),10);
   assert.equal(run('new Set(generated.map(q=>q.id)).size'),10);
+  assert.equal(run('new Set(generated.map(q=>q.slide)).size'),8);
   assert.equal(run('generated.filter(q=>q.critical).length'),1);
   assert.ok(run('generated.every(q=>q.options[q.answer]===questions.find(o=>o.id===q.id).options[questions.find(o=>o.id===q.id).answer])'));
   assert.ok(run('grade(generated,generated.map(q=>q.answer)).passed'));
@@ -96,7 +97,7 @@ page('state=load();state.slide=2;save()');
 assert.equal(JSON.parse(localData.get('smartphone-safe-use-cert:v1')).slide,chapter===1?2:7);
 page('location.hash="#/";route()');
 assert.ok(dom.innerHTML.includes('?chapter=1#/learn'));assert.ok(dom.innerHTML.includes('?chapter=2#/learn'));
-assert.ok(dom.innerHTML.includes(`残り${24-published.length}章`));
+if(published.length<24)assert.ok(dom.innerHTML.includes(`残り${24-published.length}章`));else{assert.ok(!dom.innerHTML.includes('準備中'));assert.ok(dom.innerHTML.includes('全24章を公開中'));}
 page('location.hash="#/about";route()');click({action:'reset'},'action');
 assert.equal(page('state.rules.end'),'20:30');
 assert.equal(page('state.slide'),0);
@@ -112,6 +113,32 @@ for(const n of published.filter(n=>n!==chapter))localData.set(page(`chapterStora
 const untouched=new Map([...localData].filter(([key])=>key!==page('STORAGE_KEY')&&key!==page('RULES_KEY')));
 page('location.hash="#/about";route()');click({action:'reset'},'action');
 for(const [key,value] of untouched)assert.equal(localData.get(key),value);
+// The final family review needs every chapter, a saved agreement and all checks.
+localData.clear();page('state=freshState();completion=sanitizeCompletion(null);location.hash="#/finish";route()');
+assert.ok(dom.innerHTML.includes('親子で確認する12のこと'));assert.equal(page('canComplete()'),false);
+assert.equal(page('completeCourse()'),false);assert.equal(localData.has('smartphone-safe-use-cert:completion:v1'),false);
+const passing={version:1,slide:7,learned:true,attempts:[{correct:9,passed:true,at:'2026-11-17'}],rules:null};
+for(const n of published)localData.set(page(`chapterStorageKey(${n})`),JSON.stringify(passing));
+page('state=load();completion.checked=finalChecks.map(([id])=>id)');
+assert.equal(page('courseStatus().complete'),published.length===24);assert.equal(page('canComplete()'),false);
+localData.set('smartphone-safe-use-cert:family:v1',JSON.stringify(oldRecord.rules));
+page('completion.checked=[]');assert.equal(page('canComplete()'),false);
+page('completion.checked=finalChecks.map(([id])=>id)');
+assert.equal(page('canComplete()'),published.length===24);
+assert.equal(page('completeCourse()'),published.length===24);
+if(published.length===24){
+ assert.ok(dom.innerHTML.includes('id="completion-certificate"'));assert.ok(dom.innerHTML.includes('192項目'));
+ assert.ok(JSON.parse(localData.get('smartphone-safe-use-cert:completion:v1')).completedAt);
+ const other=published.find(n=>n!==chapter);localData.delete(page(`chapterStorageKey(${other})`));
+ page('renderFinish()');assert.equal(page('canComplete()'),false);assert.ok(!dom.innerHTML.includes('id="completion-certificate"'));
+ localData.set(page(`chapterStorageKey(${other})`),JSON.stringify(passing));page('renderFinish()');
+ dom.change({target:{dataset:{finishCheck:'help'},checked:false}});
+ assert.equal(page('completion.completedAt'),null);assert.equal(page('canComplete()'),false);
+ assert.equal(JSON.parse(localData.get('smartphone-safe-use-cert:completion:v1')).completedAt,null);
+}
+assert.equal(page('sanitizeCompletion({version:1,checked:["help","help","fake"],completedAt:"bad"}).checked.length'),1);
+assert.equal(page('sanitizeCompletion({version:1,checked:finalChecks.map(([id])=>id),completedAt:"bad"}).completedAt'),null);
+console.log('PASS: completion gates, family agreement, final checklist, record validation and chapter-reset invalidation');
 console.log('PASS: home, learning gate, all slides and wrong-answer retry, quiz gate, full-score result, family/about screens, record reset');
 
 }

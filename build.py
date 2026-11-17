@@ -17,8 +17,11 @@ chapters = [{
 for number in published[1:]:
     chapter = json.loads((root / f'chapter{number}.json').read_text())
     chapter['number'] = number
-    chapter.setdefault('title', 'インターネットの仕組み')
-    chapter.setdefault('description', '情報が届く仕組みを知って、安全な行動につなげよう。')
+    if number == 2:
+        chapter.setdefault('title', 'インターネットの仕組み')
+        chapter.setdefault('description', '情報が届く仕組みを知って、安全な行動につなげよう。')
+    if not chapter.get('title') or not chapter.get('description'):
+        raise SystemExit(f'Chapter {number}: missing chapter metadata')
     lessons = chapter['lessons']
     questions = chapter['questions']
     if len(lessons) != 8 or sum('check' in s for s in lessons) != 3:
@@ -30,6 +33,8 @@ for number in published[1:]:
     for question in questions:
         if len(question['options']) != 3 or not 0 <= question['answer'] < 3 or not 0 <= question['slide'] < 8:
             raise SystemExit(f'Chapter {number}: invalid question')
+    if set(q['slide'] for q in questions) != set(range(8)):
+        raise SystemExit(f'Chapter {number}: not every lesson has a question')
     chapters.append(chapter)
 
 for chapter in chapters:
