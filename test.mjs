@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const template = fs.readFileSync(new URL('./index.template.html', import.meta.url), 'utf8');
-const source = template.match(/<script id="course-app">([\s\S]*?)<\/script>/)[1].replace(/window.addEventListener\('hashchange',route\);\nroute\(\);/, '');
+const lessonsData = JSON.parse(fs.readFileSync(new URL('./lessons.json', import.meta.url), 'utf8'));
+const source = template.replace('__LESSONS__', JSON.stringify(lessonsData)).match(/<script id="course-app">([\s\S]*?)<\/script>/)[1].replace(/window.addEventListener\('hashchange',route\);\nroute\(\);/, '');
 const sandbox = {localStorage:{getItem:()=>null},document:{getElementById:()=>({addEventListener:()=>{}})},console};
 vm.createContext(sandbox);vm.runInContext(source, sandbox);
 const run = s => vm.runInContext(s, sandbox);
@@ -29,9 +30,12 @@ assert.equal(run('sanitizeState({version:1,rules:{minutes:"60",end:"99:99",place
 assert.equal(run('sanitizeState({version:1,rules:{minutes:"60",end:"20:30",place:"living",help:"parent"}}).rules.end'),'20:30');
 const built=fs.readFileSync(new URL('./index.html',import.meta.url),'utf8');
 assert.ok(!built.includes('__HERO__'));
+assert.ok(!built.includes('__LESSONS__'));
+assert.equal(new Set(lessonsData.map(s=>s.image)).size,8);
+for(const lesson of lessonsData){assert.ok(fs.statSync(new URL(lesson.image,import.meta.url)).size>0);assert.ok(lesson.imageAlt&&lesson.caption&&lesson.explanationTitle);}
 assert.ok(built.includes('data:image/jpeg;base64,/9j/'));
 assert.ok(!/<script[^>]+src=|https:\/\/fonts\./.test(built));
-console.log('PASS: curriculum, 100 randomized exams, answer mapping, pass boundaries, critical questions, storage validation, self-contained build');
+console.log('PASS: curriculum, 100 randomized exams, answer mapping, pass boundaries, critical questions, storage validation, build and eight distinct lesson assets');
 // Exercise rendering and delegated actions without a browser or third-party dependencies.
 const elements={};
 const dom={innerHTML:'',focus:()=>{},insertAdjacentHTML:()=>{},querySelector:()=>({focus:()=>{}}),addEventListener:(event,fn)=>{dom[event]=fn;}};
@@ -46,8 +50,14 @@ page('location.hash="#/learn";route()');assert.ok(dom.innerHTML.includes('1 / 8'
 const click=(dataset,key)=>dom.click({target:{closest:selector=>selector===`[data-${key}]`?{dataset}:null}});
 for(let slide=0;slide<8;slide++){
   assert.equal(page('state.slide'),slide);
+  assert.ok(dom.innerHTML.includes(lessonsData[slide].image));
+  assert.ok(dom.innerHTML.includes(lessonsData[slide].example.title));
+  assert.ok(dom.innerHTML.includes(lessonsData[slide].actionTitle));
   if(page('!!lessons[state.slide].check')){
     click({action:'next-slide'},'action');assert.equal(page('state.slide'),slide);
+  assert.ok(dom.innerHTML.includes(lessonsData[slide].image));
+  assert.ok(dom.innerHTML.includes(lessonsData[slide].example.title));
+  assert.ok(dom.innerHTML.includes(lessonsData[slide].actionTitle));
     const correct=page('lessons[state.slide].check.answer');
     click({choice:String((correct+1)%3)},'choice');
     assert.ok(dom.innerHTML.includes('もう一度、考えてみよう。'));
