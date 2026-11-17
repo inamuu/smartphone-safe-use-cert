@@ -110,3 +110,10 @@ assert.equal(page('load().slide'),4);
 console.log('PASS: home, learning gate, all slides and wrong-answer retry, quiz gate, full-score result, family/about screens, record reset');
 
 }
+
+// Unsupported chapter URLs must safely fall back to chapter 1.
+for(const value of ['0','11','-1','nonsense','2.5','1<script>']){
+ const env={URLSearchParams,location:{search:`?chapter=${encodeURIComponent(value)}`},localStorage:{getItem:()=>null},document:{getElementById:()=>({addEventListener:()=>{}})}};
+ vm.createContext(env);vm.runInContext(source,env);assert.equal(vm.runInContext('chapterNumber',env),1);
+}
+console.log('PASS: unsupported chapter URLs fall back safely');
