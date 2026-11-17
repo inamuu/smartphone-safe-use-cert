@@ -40,7 +40,7 @@ for(const lesson of lessonsData){if(chapter>=3){assert.ok(Number.isInteger(lesso
 assert.ok(built.includes('data:image/jpeg;base64,/9j/'));
 assert.ok(!/<script[^>]+src=|https:\/\/fonts\./.test(built));
 console.log(`Chapter ${chapter}:`);
-console.log('PASS: curriculum, 100 randomized exams, answer mapping, pass boundaries, critical questions, storage validation, build and eight distinct lesson assets');
+console.log('PASS: curriculum, 100 randomized exams, answer mapping, pass boundaries, critical questions, storage validation, build and eight distinct illustration scenes');
 // Exercise rendering and delegated actions without a browser or third-party dependencies.
 const elements={};
 const dom={innerHTML:'',focus:()=>{},insertAdjacentHTML:()=>{},querySelector:()=>({focus:()=>{}}),addEventListener:(event,fn)=>{dom[event]=fn;}};
@@ -58,6 +58,7 @@ for(let slide=0;slide<8;slide++){
   assert.ok(dom.innerHTML.includes(lessonsData[slide].image));
   assert.ok(dom.innerHTML.includes(lessonsData[slide].example.title));
   assert.ok(dom.innerHTML.includes(lessonsData[slide].actionTitle));
+  if(chapter>=3){assert.ok(dom.innerHTML.includes(`left:${-(slide%2)*100}%;top:${-Math.floor(slide/2)*100}%`));}
   if(page('!!lessons[state.slide].check')){
     click({action:'next-slide'},'action');assert.equal(page('state.slide'),slide);
   assert.ok(dom.innerHTML.includes(lessonsData[slide].image));
@@ -107,12 +108,16 @@ page('renderFamily()');assert.equal(page('state.rules.end'),'19:45');
 // A damaged shared draft must not discard valid chapter progress.
 page('state.slide=4;save()');localData.set('smartphone-safe-use-cert:family:v1','broken json');
 assert.equal(page('load().slide'),4);
+for(const n of published.filter(n=>n!==chapter))localData.set(page(`chapterStorageKey(${n})`),JSON.stringify(oldRecord));
+const untouched=new Map([...localData].filter(([key])=>key!==page('STORAGE_KEY')&&key!==page('RULES_KEY')));
+page('location.hash="#/about";route()');click({action:'reset'},'action');
+for(const [key,value] of untouched)assert.equal(localData.get(key),value);
 console.log('PASS: home, learning gate, all slides and wrong-answer retry, quiz gate, full-score result, family/about screens, record reset');
 
 }
 
 // Unsupported chapter URLs must safely fall back to chapter 1.
-for(const value of ['0','11','-1','nonsense','2.5','1<script>']){
+for(const value of ['0',String(published.at(-1)+1),'-1','nonsense','2.5','1<script>']){
  const env={URLSearchParams,location:{search:`?chapter=${encodeURIComponent(value)}`},localStorage:{getItem:()=>null},document:{getElementById:()=>({addEventListener:()=>{}})}};
  vm.createContext(env);vm.runInContext(source,env);assert.equal(vm.runInContext('chapterNumber',env),1);
 }
