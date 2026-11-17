@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+for(const chapter of [1,2]){
 const template = fs.readFileSync(new URL('./index.template.html', import.meta.url), 'utf8');
-const lessonsData = JSON.parse(fs.readFileSync(new URL('./lessons.json', import.meta.url), 'utf8'));
-const source = template.replace('__LESSONS__', JSON.stringify(lessonsData)).match(/<script id="course-app">([\s\S]*?)<\/script>/)[1].replace(/window.addEventListener\('hashchange',route\);\nroute\(\);/, '');
-const sandbox = {localStorage:{getItem:()=>null},document:{getElementById:()=>({addEventListener:()=>{}})},console};
+const chapterTwo = JSON.parse(fs.readFileSync(new URL('./chapter2.json', import.meta.url), 'utf8'));
+const firstLessons=JSON.parse(fs.readFileSync(new URL('./lessons.json', import.meta.url), 'utf8'));
+const lessonsData=chapter===2?chapterTwo.lessons:firstLessons;
+const source = template.replace('__CHAPTER_TWO__', JSON.stringify(chapterTwo)).replace('__LESSONS__', JSON.stringify(firstLessons)).match(/<script id="course-app">([\s\S]*?)<\/script>/)[1].replace(/window.addEventListener\('hashchange',route\);\nroute\(\);/, '');
+const sandbox = {URLSearchParams,location:{search:chapter===2?'?chapter=2':''},localStorage:{getItem:()=>null},document:{getElementById:()=>({addEventListener:()=>{}})},console};
 vm.createContext(sandbox);vm.runInContext(source, sandbox);
 const run = s => vm.runInContext(s, sandbox);
 assert.equal(run('lessons.length'),8);
@@ -35,13 +38,14 @@ assert.equal(new Set(lessonsData.map(s=>s.image)).size,8);
 for(const lesson of lessonsData){assert.ok(fs.statSync(new URL(lesson.image,import.meta.url)).size>0);assert.ok(lesson.imageAlt&&lesson.caption&&lesson.explanationTitle);}
 assert.ok(built.includes('data:image/jpeg;base64,/9j/'));
 assert.ok(!/<script[^>]+src=|https:\/\/fonts\./.test(built));
+console.log(`Chapter ${chapter}:`);
 console.log('PASS: curriculum, 100 randomized exams, answer mapping, pass boundaries, critical questions, storage validation, build and eight distinct lesson assets');
 // Exercise rendering and delegated actions without a browser or third-party dependencies.
 const elements={};
 const dom={innerHTML:'',focus:()=>{},insertAdjacentHTML:()=>{},querySelector:()=>({focus:()=>{}}),addEventListener:(event,fn)=>{dom[event]=fn;}};
 const element=id=>elements[id]||(elements[id]={textContent:'',style:{},addEventListener:()=>{}});
 const localData=new Map();
-const ui={console,Date,FormData,confirm:()=>true,localStorage:{getItem:k=>localData.get(k)||null,setItem:(k,v)=>localData.set(k,v)},document:{title:'',getElementById:id=>id==='main'?dom:element(id),querySelectorAll:()=>[]},location:{hash:'#/'},window:{scrollTo:()=>{},addEventListener:()=>{}}};
+const ui={URLSearchParams,console,Date,FormData,confirm:()=>true,localStorage:{getItem:k=>localData.get(k)||null,setItem:(k,v)=>localData.set(k,v)},document:{title:'',getElementById:id=>id==='main'?dom:element(id),querySelectorAll:()=>[]},location:{hash:'#/',search:chapter===2?'?chapter=2':''},window:{scrollTo:()=>{},addEventListener:()=>{}}};
 vm.createContext(ui);vm.runInContext(source,ui);
 const page=s=>vm.runInContext(s,ui);
 page('route()');assert.ok(dom.innerHTML.includes('スマホと、'));
@@ -73,9 +77,27 @@ for(let i=0;i<10;i++){
   click({answer:String(page('exam.items[exam.index].answer'))},'answer');
   click({action:'next-question'},'action');
 }
-assert.ok(page('result.passed'));assert.equal(page('state.attempts.length'),1);assert.ok(dom.innerHTML.includes('第1章、合格！'));
+assert.ok(page('result.passed'));assert.equal(page('state.attempts.length'),1);assert.ok(dom.innerHTML.includes(`第${chapter}章、合格！`));
 page('location.hash="#/family";route()');assert.ok(dom.innerHTML.includes('親子で話し合って確認'));
 page('location.hash="#/about";route()');assert.ok(dom.innerHTML.includes('記録とプライバシー'));
 click({action:'reset'},'action');assert.equal(page('state.learned'),false);assert.equal(page('state.attempts.length'),0);
 assert.ok(localData.size===1);
+// Both chapters use separate keys; old chapter 1 records remain valid.
+assert.equal(page('STORAGE_KEY'),chapter===1?'smartphone-safe-use-cert:v1':'smartphone-safe-use-cert:chapter2:v1');
+assert.equal(page('sanitizeState({version:1,slide:7,learned:true,attempts:[{correct:10,passed:true,at:"2026-11-16"}]}).attempts.length'),1);
+assert.ok(!dom.innerHTML.includes('__CHAPTER_TWO__'));
+const oldRecord={version:1,slide:7,learned:true,attempts:[{correct:10,passed:true,at:'2026-11-16'}],rules:{minutes:'60',end:'20:30',place:'living',help:'parent'}};
+localData.clear();localData.set('smartphone-safe-use-cert:v1',JSON.stringify(oldRecord));
+assert.equal(page('load().rules.end'),'20:30');
+assert.equal(page('load().learned'),chapter===1);
+page('state=load();state.slide=2;save()');
+assert.equal(JSON.parse(localData.get('smartphone-safe-use-cert:v1')).slide,chapter===1?2:7);
+page('location.hash="#/";route()');
+assert.ok(dom.innerHTML.includes('?chapter=1#/learn'));assert.ok(dom.innerHTML.includes('?chapter=2#/learn'));
+assert.ok(dom.innerHTML.includes('残り22章'));
+page('location.hash="#/about";route()');click({action:'reset'},'action');
+assert.equal(page('state.rules.end'),'20:30');
+assert.equal(page('state.slide'),0);
 console.log('PASS: home, learning gate, all slides and wrong-answer retry, quiz gate, full-score result, family/about screens, record reset');
+
+}
